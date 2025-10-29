@@ -20,127 +20,133 @@
 ********************************************************************************************/
 
 #include "raylib.h"
+#include <stdlib.h>
+#include <time.h>
+#include <stdbool.h>
 
-#if defined(PLATFORM_WEB)
-    #include <emscripten/emscripten.h>
-#endif
-
-//----------------------------------------------------------------------------------
-// Local Variables Definition (local to this module)
-//----------------------------------------------------------------------------------
-Camera camera = { 0 };
-Vector3 cubePosition = { 0 };
-Vector2 ballPosition;
-Vector2 ballSpeed;
-
-Vector2 Player1Position;
-Vector2 Player1Size;
-Vector2 Player2Position;
-Vector2 Player2Size;
-
-//----------------------------------------------------------------------------------
-// Local Functions Declaration
-//----------------------------------------------------------------------------------
-static void UpdateDrawFrame(void);          // Update and draw one frame
-
-//----------------------------------------------------------------------------------
-// Main entry point
-//----------------------------------------------------------------------------------
-int main()
+int main(void)
 {
-    // Initialization
-    //--------------------------------------------------------------------------------------
+    // --- Inicialización ---
     const int screenWidth = 800;
     const int screenHeight = 450;
+    InitWindow(screenWidth, screenHeight, "Juego de la Vida - Raylib base");
+    SetTargetFPS(10);  // Velocidad baja para observar las generaciones
 
-    ballPosition.x = 400;
-    ballPosition.y = 225;
-    
-    ballSpeed.x =1;
-    ballSpeed.y =1;
+    // --- Configuración de la grilla ---
+    const int cols = 80;
+    const int rows = 45;
+    const int cellSize = 10;
 
-    Player1Position.x = 50;
-    Player1Position.y = 225;
-    Player1Size.x = 15;
-    Player1Size.y = 60;
+    bool grid[45][80] = { false };
+    bool next[45][80] = { false };
 
-    Player2Position.x = screenWidth-50;
-    Player2Position.y = 225;
-    Player2Size.x = 15;
-    Player2Size.y = 60;
+    bool running = false;
 
+    srand(time(NULL));
 
-    InitWindow(screenWidth, screenHeight, "raylib");
-
-    camera.position = (Vector3){ 10.0f, 10.0f, 8.0f };
-    camera.target = (Vector3){ 0.0f, 0.0f, 0.0f };
-    camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };
-    camera.fovy = 60.0f;
-    camera.projection = CAMERA_PERSPECTIVE;
-
-    //--------------------------------------------------------------------------------------
-
-#if defined(PLATFORM_WEB)
-    emscripten_set_main_loop(UpdateDrawFrame, 60, 1);
-#else
-    SetTargetFPS(60);               // Set our game to run at 60 frames-per-second
-    //--------------------------------------------------------------------------------------
-
-    // Main game loop
-    while (!WindowShouldClose())    // Detect window close button or ESC key
+    // --- Bucle principal del juego ---
+    while (!WindowShouldClose())
     {
-        UpdateDrawFrame();
+        // --- INPUT / CONTROLES ---
+        if (IsKeyPressed(KEY_SPACE)) running = !running;  // Iniciar/Pausar
+        if (IsKeyPressed(KEY_C)) {                        // Limpiar grilla
+            for (int y = 0; y < rows; y++)
+                for (int x = 0; x < cols; x++)
+                    grid[y][x] = false;
+        }
+
+        if (IsKeyPressed(KEY_R)) {                        // Aleatorizar
+            for (int y = 0; y < rows; y++)
+                for (int x = 0; x < cols; x++)
+                    grid[y][x] = GetRandomValue(0, 4) == 0; // ~25% vivas
+        }
+
+         //Dibujar o borrar con el mouse cuando está en pausa
+        if (!running && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+            Vector2 mouse = GetMousePosition();
+            int x = mouse.x / cellSize;
+            int y = mouse.y / cellSize;
+            if (x >= 0 && x < cols && y >= 0 && y < rows)
+                grid[y][x] = true;
+        }
+        if (!running && IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+            Vector2 mouse = GetMousePosition();
+            int x = mouse.x / cellSize;
+            int y = mouse.y / cellSize;
+            if (x >= 0 && x < cols && y >= 0 && y < rows)
+                grid[y][x] = false;
+        }
+
+// --- LÓGICA DEL JUEGO ---
+        if (running)
+        {
+            {
+                for (int y = 0; y < rows; y++)
+                for (int x = 0; x < cols; x++)
+                    grid[y][x] = GetRandomValue(0, 4) == 0;
+            }
+            for (int y = 0; y < rows; y++)
+            {
+                for (int x = 0; x < cols; x++)
+                {
+                    int alive = 0;
+
+                    // Contar vecinos vivos (considerando bordes)
+                    for (int dy = -1; dy <= 1; dy++)
+                    {
+                        for (int dx = -1; dx <= 1; dx++)
+                        {
+                            if (dx == 0 && dy == 0) continue;
+                            int nx = x + dx;
+                            int ny = y + dy;
+
+                            if (nx >= 0 && nx < cols && ny >= 0 && ny < rows)
+                                if (grid[ny][nx]) alive++;
+                        }
+                    }
+
+                    // Reglas de Conway
+                    if (grid[y][x] && (alive == 2 || alive == 3))
+                        next[y][x] = true;
+                    else if (!grid[y][x] && alive == 3)
+                        next[y][x] = true;
+                    else
+                        next[y][x] = false;
+                }
+            }
+
+            // Actualizar estado
+            for (int y = 0; y < rows; y++)
+                for (int x = 0; x < cols; x++)
+                    grid[y][x] = next[y][x];
+        }
+// --- DIBUJO ---
+        BeginDrawing();
+            ClearBackground(BLACK);
+
+            // Dibujar celdas
+            for (int y = 0; y < rows; y++)
+            {
+                for (int x = 0; x < cols; x++)
+                {
+                    if (grid[y][x])
+                        DrawRectangle(x * cellSize, y * cellSize, cellSize - 1, cellSize - 1, BLUE);
+                    else
+                        DrawRectangleLines(x * cellSize, y * cellSize, cellSize, cellSize, DARKGRAY);
+                }
+            }
+
+            // Mostrar texto
+            DrawText("Juego de la Vida - Conway", 10, 10, 20, RAYWHITE);
+            DrawText("ESPACIO: Iniciar/Pausar", 10, 35, 15, LIGHTGRAY);
+            DrawText("R: Aleatorio | C: Limpiar", 10, 55, 15, LIGHTGRAY);
+            DrawText("Click izq: Viva | Der: Muerta (en pausa)", 10, 75, 15, LIGHTGRAY);
+
+            DrawText(running ? "Simulando..." : "En pausa", 10, screenHeight - 25, 20, running ? GREEN : RED);
+        EndDrawing();
     }
-#endif
 
-    // De-Initialization
-    //--------------------------------------------------------------------------------------
-    CloseWindow();                  // Close window and OpenGL context
-    //--------------------------------------------------------------------------------------
-
+    // --- Cierre ---
+    CloseWindow();
     return 0;
-}
-
-// Update and draw game frame
-static void UpdateDrawFrame(void)
-{
-    // Update
-    //----------------------------------------------------------------------------------
-    UpdateCamera(&camera, CAMERA_ORBITAL);
-    //----------------------------------------------------------------------------------
-
-    if (IsKeyDown(KEY_W)) Player1Position.y -= 2.0f;
-    if (IsKeyDown(KEY_S)) Player1Position.y += 2.0f;
-    if (IsKeyDown(KEY_UP)) Player2Position.y -= 2.0f;
-    if (IsKeyDown(KEY_DOWN)) Player2Position.y += 2.0f;
-
-    ballPosition.x += ballSpeed.x;
-    ballPosition.y += ballSpeed.y;
-
-    if ((ballPosition.x >= (GetScreenWidth() - 15)) || (ballPosition.x <= 15)) ballSpeed.x *= -1.0f;
-    if ((ballPosition.y >= (GetScreenHeight() - 15)) || (ballPosition.y <= 15)) ballSpeed.y *= -1.05f;
-
-    if (Player1Position.x < 0) Player1Position.x = 0;
-    else if (Player1Position.x >= GetScreenWidth()) Player1Position.x = GetScreenWidth() - 1;
-    if (Player1Position.y < 0) Player1Position.y = 0;
-    else if (Player1Position.y >= GetScreenHeight() ) Player1Position.y = GetScreenHeight() - 1;
-
-    if (Player2Position.x < 0) Player2Position.x = 0;
-    else if (Player2Position.x >= GetScreenWidth()) Player2Position.x = GetScreenWidth() - 1;
-    if (Player2Position.y < 0) Player2Position.y = 0;
-    else if (Player2Position.y >= GetScreenHeight()) Player2Position.y = GetScreenHeight() - 1;
-
-    // Draw
-    //----------------------------------------------------------------------------------
-    BeginDrawing();
-        ClearBackground(BLACK);
-
-        DrawCircleV(ballPosition, 15, RED);
-        DrawRectangleV(Player1Position, Player1Size, BLUE);
-        DrawRectangleV(Player2Position, Player2Size, GREEN);
-
-        //DrawFPS(10, 10);
-
-    EndDrawing();
-    //----------------------------------------------------------------------------------
 }
