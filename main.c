@@ -130,7 +130,7 @@ int main(void)
                 for (int x = 0; x < cols; x++)
                 {
                     if (grid[y][x])
-                        DrawRectangle(x * cellSize, y * cellSize, cellSize - 1, cellSize - 1, BLUE);
+                        DrawRectangle(x * cellSize, y * cellSize, cellSize - 1, cellSize - 1, WHITE);
                     else
                         DrawRectangleLines(x * cellSize, y * cellSize, cellSize, cellSize, DARKGRAY);
                 }
